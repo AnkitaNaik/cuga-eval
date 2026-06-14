@@ -137,8 +137,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [ "${AGENT:-cuga}" = "codeact" ]; then
-    echo -e "${RED:-}Error: --agent codeact is supported only by the appworld benchmark.${NC:-}"
+if [ -n "${AGENT:-}" ] && [ "$AGENT" != "cuga" ]; then
+    echo -e "${RED:-}Error: oak_health_insurance only supports --agent cuga (got '$AGENT').${NC:-}"
     exit 2
 fi
 

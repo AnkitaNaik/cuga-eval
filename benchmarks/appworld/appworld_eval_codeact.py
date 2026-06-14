@@ -262,7 +262,7 @@ async def _authenticate_apps(app_names: list[str]) -> dict[str, Any]:
 
 async def run_agent_on_task(
     task_id: str,
-    experiment_name: str = "api_react_agent",
+    experiment_name: str = "api_codeact_agent",
     config: Optional[Config] = None,
     save_outputs: bool = True,
     experiment_manager: Optional[ExperimentManager] = None,
@@ -447,7 +447,7 @@ async def run_agent_on_task(
                 total_cost=task_result.total_cost if task_result else 0.0,
                 total_cache_input_tokens=task_result.total_cache_input_tokens if task_result else 0,
                 duration=int((end_time - start_time) if end_time else 0),
-                agent_v="react",
+                agent_v="codeact",
             )
             tracker.collect_step(Step(name="EvaluationResult", data=report_md))
             tracker.collect_score(score)
@@ -478,7 +478,7 @@ async def run_agent_on_task(
             end_time = time.time()
 
             if task_result:
-                task_result.add_exception(e, "run_agent_on_task_react")
+                task_result.add_exception(e, "run_agent_on_task_codeact")
                 task_result.api_calls = len(tool_calls)
                 task_result.steps = len(tracker.steps)
                 task_result.duration = end_time - start_time if end_time else 0
@@ -505,7 +505,7 @@ async def run_agent_on_task(
                 total_cost=task_result.total_cost if task_result else 0.0,
                 total_cache_input_tokens=task_result.total_cache_input_tokens if task_result else 0,
                 duration=int((end_time - start_time) if end_time else 0),
-                agent_v="react",
+                agent_v="codeact",
             )
             tracker.collect_step(Step(name="EvaluationResult", data=report_md))
             tracker.collect_score(0.0)
@@ -513,7 +513,7 @@ async def run_agent_on_task(
 
 async def run_agent_on_dataset(
     dataset_name: str,
-    experiment_name: str = "api_react_agent",
+    experiment_name: str = "api_codeact_agent",
     config: Optional[Config] = None,
     save_outputs: bool = True,
     continue_experiment: bool = False,
@@ -567,7 +567,7 @@ async def main():
         default="train",
         help="Dataset to run (train, dev, test_normal, test_challenge)",
     )
-    parser.add_argument("--experiment-name", default="api_react_agent", help="Name for the experiment")
+    parser.add_argument("--experiment-name", default="api_codeact_agent", help="Name for the experiment")
     parser.add_argument(
         "--environment-url",
         default=f"http://localhost:{settings.server_ports.environment_url}",
