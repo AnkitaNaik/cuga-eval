@@ -216,7 +216,7 @@ The ReAct (Reasoning + Acting) agent is a lightweight, prompt-based agent that u
 - Uses the same MCP tools and evaluation infrastructure
 - Enables direct comparison of agent architectures on the same tasks
 
-> **Note:** Oak Health Insurance does not currently support `--agent` selection — its `eval.sh` runs the CUGA agent only and rejects `--agent codeact`. M3's `--multiturn` mode is also CUGA-only and will error out if combined with `--agent react`. `--agent codeact` is supported only by AppWorld.
+> **Note:** Oak Health Insurance only supports the CUGA agent — its `eval.sh` rejects any non-`cuga` `--agent` value (both `react` and `codeact`). M3's `--multiturn` mode is also CUGA-only and will error out if combined with `--agent react`. `--agent codeact` is supported only by AppWorld.
 
 
 ---

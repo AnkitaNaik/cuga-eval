@@ -50,7 +50,12 @@ from utils.appworld_utils import (
     get_task_difficulty,
 )
 
-from benchmarks.helpers.sdk_eval_helpers import setup_react_agent_for_evaluation
+from benchmarks.helpers.sdk_eval_helpers import (
+    build_langfuse_invoke_config,
+    is_langfuse_tracing_enabled,
+    record_harness_trace_output,
+    setup_react_agent_for_evaluation,
+)
 
 APPWORLD_REACT_PROMPT = """USER:
 I am your supervisor, and you are an AI Assistant whose job is to complete my day-to-day tasks fully autonomously.
@@ -326,10 +331,33 @@ async def run_agent_on_task(
         final_answer = ""
         executed_steps = 0
 
+        # Set up Langfuse tracing for the ReAct loop (per-invoke trace-scoped
+        # callbacks, mirroring the CodeAct path). Without this the LLM calls
+        # produce no trace and task_result token/cost fields stay empty.
+        thread_id = task_id
+        langfuse_enabled = is_langfuse_tracing_enabled()
+        predefined_trace_id: Optional[str] = None
+        invoke_callbacks: Optional[list[Any]] = None
+        _langfuse = None
+        if langfuse_enabled:
+            try:
+                from langfuse import get_client
+
+                _langfuse = get_client()
+                predefined_trace_id = _langfuse.create_trace_id(
+                    seed=f"appworld_react_{task_id}_{thread_id}"
+                )
+                langfuse_trace_id = predefined_trace_id
+                lf_config = build_langfuse_invoke_config(predefined_trace_id, thread_id)
+                invoke_callbacks = lf_config.get("callbacks")
+                logger.info(f"[APPWORLD-REACT] Langfuse trace ID: {predefined_trace_id}")
+            except Exception as lf_err:
+                logger.warning(f"[APPWORLD-REACT] Langfuse init failed, tracing disabled: {lf_err}")
+
         try:
             for step_index in range(1, (config.max_steps if config else 12) + 1):
                 logger.info(f"[APPWORLD-REACT] Step {step_index}")
-                llm_text = await react_agent._call_llm(conversation)
+                llm_text = await react_agent._call_llm(conversation, invoke_callbacks=invoke_callbacks)
                 conversation.append({"role": "assistant", "content": llm_text})
                 code = _extract_python_block(llm_text)
 
@@ -368,8 +396,29 @@ async def run_agent_on_task(
 
             res = evaluation.report(print_it=False, colorize=False, save_file_path=None)
 
+            # Record the harness-level input/output on the same trace and flush
+            # so the per-invoke generations appear in Langfuse before we read
+            # back the trace data below.
+            if _langfuse and predefined_trace_id:
+                try:
+                    record_harness_trace_output(
+                        _langfuse,
+                        predefined_trace_id,
+                        input={"task_id": task_id, "intent": world.task.instruction},
+                        output={"final_answer": final_answer, "tool_calls": tool_calls},
+                        metadata={"thread_id": thread_id},
+                    )
+                    _langfuse.flush()
+                except Exception as flush_err:
+                    logger.debug(f"[APPWORLD-REACT] Langfuse flush failed: {flush_err}")
+
             langfuse_data = None
-            langfuse_trace_id = get_current_trace_id()
+            # Prefer the predefined trace ID created above; fall back to the
+            # OpenTelemetry current span only if Langfuse setup was skipped.
+            if predefined_trace_id is not None:
+                langfuse_trace_id = predefined_trace_id
+            else:
+                langfuse_trace_id = get_current_trace_id()
             if langfuse_trace_id:
                 langfuse_handler = LangfuseTraceHandler(langfuse_trace_id)
                 langfuse_data = await langfuse_handler.get_langfuse_data()

@@ -40,6 +40,26 @@ for arg in "$@"; do
     fi
 done
 
+# Early --agent validation before any server/process side effects (fast-fail).
+# Oak only supports the CUGA agent. The full --agent parse happens later below;
+# this pre-scan only extracts the value early enough to reject invalid ones
+# before we start killing ports and spawning servers.
+_EARLY_AGENT=""
+_i=1
+for arg in "$@"; do
+    if [[ "$arg" == "--agent" ]]; then
+        _next=$((_i + 1))
+        _EARLY_AGENT="${!_next:-}"
+        break
+    fi
+    _i=$((_i + 1))
+done
+if [ -n "$_EARLY_AGENT" ] && [ "$_EARLY_AGENT" != "cuga" ]; then
+    echo -e "${RED:-}Error: oak_health_insurance only supports --agent cuga (got '$_EARLY_AGENT').${NC:-}"
+    exit 2
+fi
+unset _EARLY_AGENT _i _next
+
 FASTAPI_PORT=8090
 REGISTRY_PORT=8001
 FASTAPI_PID=""

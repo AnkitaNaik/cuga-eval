@@ -111,6 +111,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Validate --agent selection before any server/process side effects (fast-fail)
+if [ "${AGENT:-cuga}" = "codeact" ]; then
+    echo -e "${RED:-}Error: --agent codeact is supported only by the appworld benchmark.${NC:-}"
+    exit 2
+fi
+
 
 REGISTRY_PID=""
 
@@ -325,11 +331,6 @@ if [ "$NO_POLICIES" != "true" ] && [ -d "$POLICIES_DIR" ]; then
             --policies-dir "$POLICIES_DIR" \
             --output "$POLICIES_DIR/policies.json"
     fi
-fi
-
-if [ "${AGENT:-cuga}" = "codeact" ]; then
-    echo -e "${RED:-}Error: --agent codeact is supported only by the appworld benchmark.${NC:-}"
-    exit 2
 fi
 
 # Select eval script

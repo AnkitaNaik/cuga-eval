@@ -630,7 +630,7 @@ async def main():
     tracker = ActivityTracker()
     tracker.start_experiment(
         task_ids=filtered_task_ids or [],
-        experiment_name=eval_key or "appworld_react",
+        experiment_name=eval_key or "appworld_codeact",
         description="",
     )
 

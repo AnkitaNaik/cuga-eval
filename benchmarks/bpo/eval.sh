@@ -177,6 +177,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Validate --agent selection before any server/process side effects (fast-fail)
+if [ "${AGENT:-cuga}" = "codeact" ]; then
+    echo -e "${RED:-}Error: --agent codeact is supported only by the appworld benchmark.${NC:-}"
+    exit 2
+fi
+
 # Build the --data arguments for eval_bench_sdk.py
 if [ ${#TASK_FILES[@]} -eq 0 ]; then
     # Default: use the standard test suite
@@ -256,11 +262,6 @@ fi
 # Run evaluation
 echo -e "${YELLOW:-}Starting evaluation...${NC:-}"
 echo ""
-
-if [ "${AGENT:-cuga}" = "codeact" ]; then
-    echo -e "${RED:-}Error: --agent codeact is supported only by the appworld benchmark.${NC:-}"
-    exit 2
-fi
 
 # Run with resolved --data args and any remaining passthrough arguments
 if [ "${AGENT:-cuga}" = "react" ]; then
