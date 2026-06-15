@@ -344,9 +344,7 @@ async def run_agent_on_task(
                 from langfuse import get_client
 
                 _langfuse = get_client()
-                predefined_trace_id = _langfuse.create_trace_id(
-                    seed=f"appworld_react_{task_id}_{thread_id}"
-                )
+                predefined_trace_id = _langfuse.create_trace_id(seed=f"appworld_react_{task_id}_{thread_id}")
                 langfuse_trace_id = predefined_trace_id
                 lf_config = build_langfuse_invoke_config(predefined_trace_id, thread_id)
                 invoke_callbacks = lf_config.get("callbacks")
