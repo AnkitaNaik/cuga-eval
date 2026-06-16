@@ -356,3 +356,59 @@ def test_eval_report_appworld_difficulty_and_test_set_breakdowns(tmp_path):
     assert "Test-Set Breakdown (AppWorld)" in report
     assert "challenge" in report
     assert "normal" in report
+
+
+def test_compare_group_breakdown_includes_cost_columns(tmp_path):
+    """Compare-report per-group sections carry per-task cost columns, not just
+    pass metrics, so cost can be compared across groups (issue #51 review)."""
+    run1 = _m3_run(
+        tmp_path,
+        "r1.json",
+        [
+            {"task_name": "t1", "success": True, "m3_task_id": 2, "domain": "hockey", "task_number": 1},
+            {"task_name": "t2", "success": False, "m3_task_id": 3, "domain": "books", "task_number": 1},
+        ],
+    )
+
+    report = generate_report({"gpt4o:react": [run1]})
+
+    # Per-group sections now expose per-task cost alongside pass@k/pass^k.
+    assert "Tok/Task" in report
+    assert "LLM/Task" in report
+    assert "Dur/Task" in report
+    # And the underlying per-task values still render (1000 tokens / task).
+    assert "1,000" in report
+
+
+def test_eval_group_breakdown_includes_per_task_averages(tmp_path):
+    """Single-eval per-group breakdown shows per-task averages next to totals,
+    so groups of different sizes are comparable (issue #51 review)."""
+    run = _m3_run(
+        tmp_path,
+        "eval.json",
+        [
+            {"task_name": "t1", "success": True, "m3_task_id": 2, "domain": "hockey", "task_number": 1},
+            {"task_name": "t2", "success": False, "m3_task_id": 2, "domain": "hockey", "task_number": 2},
+            {"task_name": "t3", "success": True, "m3_task_id": 3, "domain": "books", "task_number": 1},
+        ],
+    )
+
+    report = generate_eval_report(run)
+
+    assert "Tok/Task" in report
+    assert "LLM/Task" in report
+    assert "Dur/Task" in report
+    # Raw totals are still present alongside the averages.
+    assert "Tokens" in report
+    assert "LLM Calls" in report
+
+
+def test_load_appworld_categories_warns_when_config_missing(tmp_path, capsys):
+    """A missing appworld/eval_config.toml warns on stderr instead of silently
+    dropping the test-set breakdown (issue #51 review)."""
+    from benchmarks.helpers.compare_report import _load_appworld_categories
+
+    missing = tmp_path / "nope" / "eval_config.toml"
+    assert _load_appworld_categories(config_path=missing) == {}
+    err = capsys.readouterr().err
+    assert "AppWorld category config not found" in err

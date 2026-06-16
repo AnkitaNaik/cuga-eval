@@ -258,16 +258,27 @@ def _m3_capability_domain_group(t: dict) -> str | None:
     return f"m3_task_{tid}/{dom}"
 
 
-def _load_appworld_categories() -> dict[str, str]:
+def _load_appworld_categories(config_path: Path | None = None) -> dict[str, str]:
     """Map AppWorld task ids to "normal"/"challenge" via the
     ``test_challenge_*`` / ``test_normal_all_*`` lists in
     ``benchmarks/appworld/eval_config.toml``.
 
     Returns {} if that file doesn't exist (keeps non-AppWorld reports
-    unaffected).
+    unaffected), warning on stderr since the file is a committed repo asset.
+    ``config_path`` is overridable for tests.
     """
-    config_path = Path(__file__).resolve().parents[1] / "appworld" / "eval_config.toml"
+    if config_path is None:
+        config_path = Path(__file__).resolve().parents[1] / "appworld" / "eval_config.toml"
     if not config_path.exists():
+        # This is a committed repo asset, so its absence almost always means it
+        # was moved/renamed in a refactor — which would silently drop the
+        # AppWorld test-set breakdown from every report. Surface it on stderr
+        # (not the report stdout) instead of failing silently (issue #51 review).
+        print(
+            f"WARNING: AppWorld category config not found at {config_path}; "
+            "AppWorld test-set breakdown will be omitted.",
+            file=sys.stderr,
+        )
         return {}
     with config_path.open("rb") as f:
         config = tomllib.load(f).get("eval_config", {})
@@ -321,6 +332,28 @@ def _aggregate_costs(tasks: dict) -> dict:
     }
 
 
+def _per_config_cost_stats(runs, task_filter=None) -> dict:
+    """Mean tokens / LLM calls / duration *per task* across runs for the
+    filtered task subset. Companion to ``_per_config_pass_stats`` so the
+    per-group compare sections can answer "did this group cost more?" and not
+    just "did it pass more?" (issue #51 review). Per-task means (not totals)
+    keep groups of different sizes comparable.
+    """
+    tokens, llm, durs = [], [], []
+    for r in runs:
+        for t in r["tasks"].values():
+            if task_filter is not None and not task_filter(t):
+                continue
+            tokens.append(t.get("tokens"))
+            llm.append(t.get("llm_calls"))
+            durs.append(t.get("duration"))
+    return {
+        "avg_tokens": _avg(tokens),
+        "avg_llm_calls": _avg(llm),
+        "avg_duration": _avg(durs),
+    }
+
+
 def _per_group_section(
     model_data, fence_open, fence_close, h2, *, title, col_label, group_fn, sort_key=None
 ) -> list[str]:
@@ -350,22 +383,27 @@ def _per_group_section(
     header = (
         f"{'Configuration':<28} {col_label:>{grp_w}}  {'Tasks':>5}  "
         f"{'Pass@1':>9}  {'pass@k':>8}  {'pass^k':>8}  "
-        f"{'maj@k':>8}  {'Cons':>5}"
+        f"{'maj@k':>8}  {'Cons':>5}  "
+        f"{'Tok/Task':>10}  {'LLM/Task':>9}  {'Dur/Task':>9}"
     )
     out.append(header)
     out.append("─" * len(header))
     for config_key, runs in model_data.items():
         display = _format_config_label(config_key)
         for grp in sorted_groups:
-            stats = _per_config_pass_stats(runs, task_filter=lambda t, _g=grp: group_fn(t) == _g)
+            grp_filter = lambda t, _g=grp: group_fn(t) == _g  # noqa: E731
+            stats = _per_config_pass_stats(runs, task_filter=grp_filter)
             if stats["n_tasks"] == 0:
                 continue
+            cost = _per_config_cost_stats(runs, task_filter=grp_filter)
             cons_s = f"{stats['consistency']:.2f}" if stats["consistency"] is not None else "  --"
             out.append(
                 f"{display:<28} {grp:>{grp_w}}  {stats['n_tasks']:>5}  "
                 f"{stats['avg_rate'] * 100:>8.1f}%  "
                 f"{stats['pass_at_n'] * 100:>7.1f}%  {stats['pass_pow_n'] * 100:>7.1f}%  "
-                f"{stats['maj_at_n'] * 100:>7.1f}%  {cons_s:>5}"
+                f"{stats['maj_at_n'] * 100:>7.1f}%  {cons_s:>5}  "
+                f"{_fmt(cost['avg_tokens']):>10}  {_fmt(cost['avg_llm_calls']):>9}  "
+                f"{_fmt(cost['avg_duration'], 's'):>9}"
             )
     if fence_close():
         out.append(fence_close())
@@ -395,7 +433,14 @@ def _eval_group_breakdown(
     out: list[str] = [h2(title), ""]
     if fence_open():
         out.append(fence_open())
-    header = f"{col_label:<{grp_w}}  {'Tasks':>5}  {'Pass@1':>8}  {'Tokens':>10}  {'LLM Calls':>9}  {'Duration':>9}"
+    # Totals AND per-task averages: raw totals across groups of different sizes
+    # aren't directly comparable, so the avg-per-task columns let you compare
+    # cost across groups (issue #51 review).
+    header = (
+        f"{col_label:<{grp_w}}  {'Tasks':>5}  {'Pass@1':>8}  "
+        f"{'Tokens':>10}  {'Tok/Task':>10}  {'LLM Calls':>9}  {'LLM/Task':>9}  "
+        f"{'Duration':>9}  {'Dur/Task':>9}"
+    )
     out.append(header)
     out.append("─" * len(header))
     for grp in sorted_groups:
@@ -406,8 +451,9 @@ def _eval_group_breakdown(
         agg = _aggregate_costs(grp_tasks)
         out.append(
             f"{grp:<{grp_w}}  {n:>5}  {rate:>7.1f}%  "
-            f"{_fmt(agg['total_tokens']):>10}  {_fmt(agg['total_llm_calls']):>9}  "
-            f"{_fmt(agg['total_duration'], 's'):>9}"
+            f"{_fmt(agg['total_tokens']):>10}  {_fmt(agg['avg_tokens']):>10}  "
+            f"{_fmt(agg['total_llm_calls']):>9}  {_fmt(agg['avg_llm_calls']):>9}  "
+            f"{_fmt(agg['total_duration'], 's'):>9}  {_fmt(agg['avg_duration'], 's'):>9}"
         )
     if fence_close():
         out.append(fence_close())
