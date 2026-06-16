@@ -51,9 +51,13 @@ def filter_samples_by_eval_key(
 ) -> List[Dict[str, Any]]:
     """Keep only samples whose ``sample_id``/``uuid`` is in ``eval_key_ids``.
 
-    ``eval_key_ids`` must already be lower-cased. If it is ``None``, returns
-    ``samples`` unchanged.
+    Matching is case-insensitive on both sides: ``eval_key_ids`` is lower-cased
+    here defensively so callers need not pre-normalize (the symmetric contract
+    avoids silent zero-matches when a caller forgets to lower-case). ``None``
+    means "no restriction" and returns ``samples`` unchanged; an empty set keeps
+    nothing (an explicit empty split).
     """
     if eval_key_ids is None:
         return samples
-    return [s for s in samples if str(s.get("sample_id", s.get("uuid", ""))).lower() in eval_key_ids]
+    wanted = {str(i).lower() for i in eval_key_ids}
+    return [s for s in samples if str(s.get("sample_id", s.get("uuid", ""))).lower() in wanted]

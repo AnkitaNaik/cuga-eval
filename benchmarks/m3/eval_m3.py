@@ -2363,9 +2363,14 @@ async def run_config_mode(args, container_runtime: str, defer_save: bool = False
         try:
             eval_key_id_list = load_eval_key_ids(getattr(args, "eval_key", None))
         except (KeyError, FileNotFoundError) as e:
+            # A typo'd/stale --eval-key must fail the run, not log-and-continue:
+            # a silent full or empty run reads as a green CI job (see issue #44).
             logger.error(f"--eval-key error: {e}")
-            return
-        if eval_key_id_list:
+            sys.exit(1)
+        # Distinguish an explicit (possibly empty) split from "no restriction":
+        # `None` means run everything; `[]` is an explicit empty split that must
+        # match nothing (and will trip the zero-match guard in main()).
+        if eval_key_id_list is not None:
             args.eval_key_ids = {i.lower() for i in eval_key_id_list}
             logger.info(
                 f"📦 --eval-key {getattr(args, 'eval_key', None) or '(default)'}: "
@@ -2374,7 +2379,8 @@ async def run_config_mode(args, container_runtime: str, defer_save: bool = False
         else:
             args.eval_key_ids = None
     elif getattr(args, "eval_key", None):
-        logger.warning("--eval-key requires --m3-data; ignoring")
+        logger.error("--eval-key requires --m3-data")
+        sys.exit(1)
 
     # When --m3-data is set but no --capability/--task service name was given,
     # expand one capability at a time. Bare-domain registry names (books,
@@ -2972,7 +2978,18 @@ Examples:
     container_runtime = os.environ.get("CONTAINER_RUNTIME", "podman")
 
     logger.info(f"Running in CONFIG MODE (registry-based) with config file: {args.from_config}")
-    await run_config_mode(args, container_runtime)
+    results = await run_config_mode(args, container_runtime)
+
+    # Zero-match guard: when --eval-key restricted the corpus but nothing matched
+    # (typo, or eval_config.toml UUIDs gone stale against a regenerated zip),
+    # fail loudly instead of exiting 0 on an empty run (issue #44, Sergey review).
+    if getattr(args, "eval_key_ids", None) is not None and not results:
+        logger.error(
+            f"--eval-key {getattr(args, 'eval_key', None) or '(default)'} matched 0 samples in the "
+            "--m3-data corpus. Check the key spelling and that eval_config.toml UUIDs match the corpus "
+            "(regenerate with benchmarks/m3/scripts/generate_eval_split.py if the zip changed)."
+        )
+        sys.exit(1)
 
 
 # Removed run_direct_mode() function - now using registry mode only

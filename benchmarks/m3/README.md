@@ -164,7 +164,8 @@ the `data/small_train.zip` corpus (200 samples: 20 domains × 10 tasks each, eve
 split across the two capabilities). Pass `--eval-key <name>` to restrict
 `--m3-data` to one of these named sets, applied *before* any
 `--task`/`--domain`/`--capability`/`--max-samples-per-domain` filters (those still
-narrow the set further).
+narrow the set further). `--max-samples` is an accepted alias of
+`--max-samples-per-domain`; both cap the per-domain sample count.
 
 | Eval key | Tasks | Description |
 |---|---|---|

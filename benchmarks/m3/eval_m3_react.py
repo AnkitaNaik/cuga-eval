@@ -442,11 +442,32 @@ class M3ReactEvaluator:
                 if self.domain_filter and dom not in self.domain_filter:
                     continue
                 merged_samples = loader.load_domain(tid, dom)
-                merged_samples = filter_samples_by_eval_key(merged_samples, self.eval_key_ids)
+                if self.eval_key_ids is not None:
+                    # Mirror the registry path's per-domain observability so an
+                    # --eval-key that matches zero samples in a domain is visible
+                    # (instead of silently dropping the domain).
+                    kept = filter_samples_by_eval_key(merged_samples, self.eval_key_ids)
+                    if not kept:
+                        logger.info(
+                            f"[m3_task_{tid}/{dom}] --eval-key: no samples in this split for "
+                            f"this domain; skipping"
+                        )
+                    else:
+                        logger.info(f"📦 --eval-key: restricted m3_task_{tid}/{dom} to {len(kept)} sample(s)")
+                    merged_samples = kept
                 for sample in merged_samples:
                     tc = _merged_to_react_test_case(sample, task_id=tid)
                     if tc is not None:
                         all_cases.append(tc)
+        # Zero-match guard: an --eval-key that matched nothing across the entire
+        # corpus is almost always a typo or stale eval_config.toml UUIDs; fail
+        # loudly rather than running an empty eval that exits 0 (issue #44).
+        if self.eval_key_ids is not None and not all_cases:
+            raise ValueError(
+                "--eval-key matched 0 samples in the --m3-data corpus. Check the key spelling and "
+                "that eval_config.toml UUIDs match the corpus (regenerate with "
+                "benchmarks/m3/scripts/generate_eval_split.py if the zip changed)."
+            )
         return all_cases
 
     async def evaluate_all(self, data_path: Optional[str] = None):
@@ -798,16 +819,21 @@ async def main():
         try:
             eval_key_id_list = load_eval_key_ids(getattr(args, "eval_key", None))
         except (KeyError, FileNotFoundError) as e:
+            # Fail the run on a bad/stale --eval-key rather than exiting 0 on an
+            # unintended full or empty run (issue #44, Sergey review).
             logger.error(f"--eval-key error: {e}")
-            return
-        if eval_key_id_list:
+            sys.exit(1)
+        # `None` = no restriction (run everything); `[]` = explicit empty split
+        # that must match nothing and trip the zero-match guard below.
+        if eval_key_id_list is not None:
             eval_key_ids = {i.lower() for i in eval_key_id_list}
             logger.info(
                 f"📦 --eval-key {getattr(args, 'eval_key', None) or '(default)'}: "
                 f"restricting --m3-data corpus to {len(eval_key_ids)} sample id(s)"
             )
     elif getattr(args, "eval_key", None):
-        logger.warning("--eval-key requires --m3-data; ignoring")
+        logger.error("--eval-key requires --m3-data")
+        sys.exit(1)
 
     evaluator = M3ReactEvaluator(
         difficulty_filter=args.difficulty,

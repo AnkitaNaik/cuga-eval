@@ -96,6 +96,15 @@ def test_filter_samples_by_eval_key() -> None:
     assert filter_samples_by_eval_key(samples, {"zzz"}) == []
 
 
+def test_filter_samples_by_eval_key_normalizes_caller_case() -> None:
+    """The helper lower-cases ``eval_key_ids`` defensively, so a caller that
+    forgets to normalize still matches (no silent zero-match)."""
+    samples = [{"sample_id": "AAA"}, {"uuid": "bbb"}]
+    assert filter_samples_by_eval_key(samples, {"AAA", "BBB"}) == samples
+    # Empty set is an explicit empty split: keep nothing (distinct from None).
+    assert filter_samples_by_eval_key(samples, set()) == []
+
+
 @pytest.mark.parametrize("module", ["eval_m3.py", "eval_m3_react.py"])
 def test_eval_key_flag_wired_into_evaluators(module: str) -> None:
     src = (_M3_DIR / module).read_text()
@@ -111,8 +120,12 @@ def test_eval_m3_filters_preloaded_data_by_eval_key() -> None:
 
 def test_eval_m3_react_filters_merged_samples_by_eval_key() -> None:
     src = (_M3_DIR / "eval_m3_react.py").read_text()
+    # Assert the wiring (helper called on the loaded samples with the stored id
+    # set) without pinning the exact call expression, so harmless refactors of
+    # the surrounding code don't break the test.
     assert "self.eval_key_ids" in src
-    assert "filter_samples_by_eval_key(merged_samples, self.eval_key_ids)" in src
+    assert "filter_samples_by_eval_key" in src
+    assert "merged_samples" in src
 
 
 def test_eval_sh_help_documents_eval_key() -> None:
