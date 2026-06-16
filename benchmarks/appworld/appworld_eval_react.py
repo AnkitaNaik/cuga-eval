@@ -213,7 +213,11 @@ def _extract_python_block(text: str) -> str:
     if partial_match:
         return partial_match.group(1).strip()
 
-    return text.strip()
+    # No ```python fence at all: return "" rather than the raw text. The system
+    # prompt requires fenced code, so unfenced output is prose/refusal — feeding
+    # it to world.execute() would run arbitrary text as Python. Returning ""
+    # lets the caller's `if not code` guard hard-fail instead (PR #79/#74 review).
+    return ""
 
 
 def _completion_called(code: str) -> bool:

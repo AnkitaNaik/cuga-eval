@@ -328,7 +328,11 @@ async def run_agent_on_task(
 
                 _langfuse = get_client()
                 # Deterministic seed (same task_id is re-runnable in Langfuse UI).
-                predefined_trace_id = _langfuse.create_trace_id(seed=f"appworld_react_{task_id}_{thread_id}")
+                # Use a codeact-specific prefix so a codeact run doesn't collide
+                # with the react run's trace for the same task (PR #79/#74 review).
+                predefined_trace_id = _langfuse.create_trace_id(
+                    seed=f"appworld_codeact_{task_id}_{thread_id}"
+                )
                 langfuse_trace_id = predefined_trace_id
                 lf_config = build_langfuse_invoke_config(predefined_trace_id, thread_id)
                 # ReAct has no LangGraph config; only trace-scoped callbacks are passed per LLM call.
@@ -560,7 +564,7 @@ async def run_agent_on_dataset(
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="Run React agent on AppWorld tasks")
+    parser = argparse.ArgumentParser(description="Run CodeAct agent on AppWorld tasks")
     parser.add_argument("--task-id", nargs="*", help="Run specific task ID(s)")
     parser.add_argument(
         "--dataset",
