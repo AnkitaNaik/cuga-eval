@@ -516,6 +516,7 @@ def assemble_bundle(
             "policies_enabled": not args.get("no_policies", False),
             "task_files": [str(Path(tf).name) for tf in task_files],
             "task_ids": args.get("task_ids"),
+            "eval_key": args.get("eval_key"),
         },
         "runtime_config": {
             "env_vars": collect_environment(),
@@ -552,6 +553,7 @@ def assemble_compare_bundle(
     trajectory_dirs: dict[str, list[list[Path]]] | None = None,
     log_files: dict[str, list[str | Path]] | None = None,
     fetch_langfuse: bool = False,
+    eval_key: str | None = None,
 ) -> Path:
     """Create a comparison-level bundle directory.
 
@@ -705,6 +707,7 @@ def assemble_compare_bundle(
         "eval_repo": collect_repo_git_info(),
         "configs": list(config_results.keys()),
         "runs_per_config": {k: len(v) for k, v in config_results.items()},
+        "eval_key": eval_key,
         "runtime_config": {
             "models": models_config,
             "env_vars": collect_environment(),
@@ -766,6 +769,11 @@ def cli():
     )
     p_asm.add_argument("--task-ids", nargs="*", default=None)
     p_asm.add_argument(
+        "--eval-key",
+        default=None,
+        help="Eval-config split used for this run (e.g. 'train'/'test'), recorded in bundle metadata",
+    )
+    p_asm.add_argument(
         "--trajectory-dir", default=None, help="Path to a specific trajectory folder to include"
     )
     p_asm.add_argument("--log-files", nargs="*", default=None, help="Log files to include in the bundle")
@@ -797,6 +805,11 @@ def cli():
     p_cmp.add_argument(
         "--fetch-langfuse", action="store_true", help="Download Langfuse traces for tasks that have trace IDs"
     )
+    p_cmp.add_argument(
+        "--eval-key",
+        default=None,
+        help="Eval-config split used for these runs (e.g. 'train'/'test'), recorded in bundle metadata",
+    )
     p_cmp.add_argument("--zip", action="store_true")
 
     args = parser.parse_args()
@@ -817,7 +830,11 @@ def cli():
         bundle_dir = assemble_bundle(
             result_files=args.result_files,
             task_files=args.task_files,
-            args={"no_policies": args.no_policies, "task_ids": getattr(args, "task_ids", None)},
+            args={
+                "no_policies": args.no_policies,
+                "task_ids": getattr(args, "task_ids", None),
+                "eval_key": getattr(args, "eval_key", None),
+            },
             benchmark_name=args.benchmark,
             model_profile=args.model_profile,
             policies_dir=policies_dir,
@@ -863,6 +880,7 @@ def cli():
             trajectory_dirs=traj_dirs,
             log_files=log_file_map,
             fetch_langfuse=args.fetch_langfuse,
+            eval_key=getattr(args, "eval_key", None),
         )
         print(f"Bundle created: {bundle_dir}")
         if args.zip:
