@@ -132,6 +132,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Validate --agent selection before any server/process side effects (fast-fail)
+if [ "${AGENT:-cuga}" = "codeact" ]; then
+    echo -e "${RED:-}Error: --agent codeact is supported only by the appworld benchmark.${NC:-}"
+    exit 2
+fi
+
 
 REGISTRY_PID=""
 
