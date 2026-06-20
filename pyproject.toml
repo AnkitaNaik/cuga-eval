@@ -41,7 +41,6 @@ required-environments = [
 
 [tool.uv.sources]
 cuga = { path = "../cuga-agent", editable = true }
-appworld = { path = "benchmarks/appworld/appworld", editable = true }
 # `appworld` is intentionally NOT listed here. The appworld benchmark is opt-in:
 # users run `./setup_appworld.sh`, which clones the upstream repo into
 # `benchmarks/appworld/appworld` and then `uv add --editable ... --group appworld`,
@@ -52,10 +51,6 @@ appworld = { path = "benchmarks/appworld/appworld", editable = true }
 cuga = "cuga.cli:app"
 
 [dependency-groups]
-appworld = [
-    "appworld",
-]
-
 dev = [
     "pytest>=8.3.5",
     "pytest-cov>=5.0",
