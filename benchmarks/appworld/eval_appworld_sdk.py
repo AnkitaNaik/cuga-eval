@@ -56,6 +56,7 @@ from benchmarks.appworld.utils.appworld_utils import (
     get_specific_task_levels,
     get_task_difficulty,
 )
+from benchmarks.appworld.utils.registry_auth import authenticate_apps, get_registry_base_url
 from benchmarks.helpers import (
     flush_langfuse,
     print_evaluation_summary,
@@ -66,20 +67,6 @@ from benchmarks.helpers.sdk_eval_helpers import _react_steps_from_invoke_result
 
 tracker = ActivityTracker()
 var_manager = VariablesManager()
-
-
-def _get_registry_base_url() -> str:
-    registry_port = os.getenv("DYNACONF_SERVER_PORTS__REGISTRY")
-    if registry_port:
-        return f"http://localhost:{registry_port}"
-
-    server_ports = getattr(settings, "server_ports", None)
-    for attr_name in ("registry", "registry_url", "registry_port"):
-        port = getattr(server_ports, attr_name, None) if server_ports else None
-        if port:
-            return f"http://localhost:{port}"
-
-    return "http://localhost:8001"
 
 
 def _task_ids_for_run(
@@ -455,7 +442,7 @@ B. App-specific instructions:
         agent_runner = AgentRunner(browser_enabled=False)
 
         try:
-            requests.get(f"{_get_registry_base_url()}/api/reset", timeout=10)
+            requests.get(f"{get_registry_base_url()}/api/reset", timeout=10)
             await agent_runner.initialize_appworld_env()
 
             with AppWorld(
@@ -471,6 +458,58 @@ B. App-specific instructions:
                 tracker.pi += f"current_datetime: {tracker.current_date}"
 
                 user_context = _build_user_context(world)
+
+                # Pre-authenticate every AppWorld app for this task so each app's
+                # access token — crucially file_system, which api_overrides
+                # auto-injects as file_system_access_token into cross-app
+                # receipt/attachment calls — is stored in the registry before the
+                # agent runs. Must happen AFTER AppWorld(...) opens (the task's
+                # supervisor must be live for the password lookup) and after the
+                # /api/reset above (which nulls the auth manager). Empty apps list
+                # = all configured apps; the registry skips apps it can't log into.
+                # Fail this task (not the whole suite) if auth transport fails, or
+                # if this task uses file_system and that app is not ok.
+                try:
+                    auth_result = await authenticate_apps([])
+                    logger.info(f"[APPWORLD-SDK] authenticate_apps: {auth_result}")
+                    fs_status = (auth_result.get("authenticated") or {}).get("file_system")
+                    if fs_status != "ok" and "file_system" in world.task.app_descriptions:
+                        raise RuntimeError(
+                            f"file_system authenticate_apps status={fs_status!r}, expected 'ok'"
+                        )
+                    elif fs_status != "ok":
+                        logger.error(
+                            f"[APPWORLD-SDK] file_system auth status={fs_status!r}; "
+                            "task does not use file_system, continuing"
+                        )
+                except Exception as auth_exc:
+                    err_msg = f"authenticate_apps failed: {auth_exc}"
+                    logger.error(f"[APPWORLD-SDK] {err_msg}")
+                    tracker.finish_task(
+                        intent=world.task.instruction,
+                        site="",
+                        task_id=task_id,
+                        eval=json.dumps({"error": err_msg}),
+                        score=0.0,
+                        agent_answer="",
+                        exception=True,
+                        num_steps=0,
+                    )
+                    tracker.collect_score(0.0)
+                    return {
+                        "task_name": task_id,
+                        "difficulty": difficulty,
+                        "intent": world.task.instruction,
+                        "success": False,
+                        "match_rate": 0.0,
+                        "response": "",
+                        "expected_keywords": [],
+                        "found_keywords": [],
+                        "missing_keywords": [],
+                        "tool_calls": [],
+                        "error": err_msg,
+                        "appworld_evaluation": {},
+                    }
 
                 def tracker_callback(result: Dict[str, Any], keyword_check: Dict[str, Any], intent: str):
                     agent_steps = result.get("steps")
