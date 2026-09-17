@@ -220,6 +220,11 @@ Override the model:
 
 ## Output
 
-The workflow posts a PR comment containing trusted run metadata and a link to the uploaded artifact. It intentionally does not render PR-controlled evaluation markdown directly in the comment.
+The workflow posts a PR comment containing:
 
-The full output is uploaded as a GitHub Actions artifact. During the workflow run, logs are written under the checked-out workspace in `pr-eval-logs/`.
+- trusted run metadata;
+- requested command and SHA;
+- the evaluation report markdown emitted by the PR regression runner;
+- a link to the uploaded workflow artifact.
+
+The full output is also uploaded as a GitHub Actions artifact. During the workflow run, logs are written under the checked-out workspace in `pr-eval-logs/`.
