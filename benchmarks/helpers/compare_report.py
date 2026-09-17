@@ -1330,7 +1330,7 @@ def _bucket_m3_tasks(tasks: dict) -> tuple:
     return rows, True
 
 
-def generate_eval_report(result_file: str, markdown: bool = True) -> str:
+def generate_eval_report(result_file: str, markdown: bool = True, for_pr_comment: bool = False) -> str:
     """Generate a single-evaluation-run report.
 
     When the result file is M3-shaped (each task has ``m3_task_id`` + ``domain``),
@@ -1338,7 +1338,8 @@ def generate_eval_report(result_file: str, markdown: bool = True) -> str:
     rows are readable instead of an unattributed UUID. When ``markdown=False``,
     the same content is rendered as a plain-text monospace table for terminals
     (compare.sh's stdout path); ``markdown=True`` (default) is what gets saved
-    into the bundle's report.md.
+    into the bundle's report.md. ``for_pr_comment`` is an explicit opt-in for
+    the PR-regression workflow's collapsible, sentinel-wrapped markdown.
     """
     parsed = parse_result_file(result_file)
     rows, grouped = _bucket_m3_tasks(parsed["tasks"])
@@ -1349,15 +1350,15 @@ def generate_eval_report(result_file: str, markdown: bool = True) -> str:
     fence_open = (lambda: "```text") if markdown else (lambda: "")
     fence_close = (lambda: "```") if markdown else (lambda: "")
 
-    lines = ["######## REPORT START ########"]
-    if markdown:
+    if markdown and for_pr_comment:
+        lines = ["######## REPORT START ########"]
         lines.append("<details>")
         lines.append("<summary>Evaluation Report</summary>")
         lines.append("")
         lines.append(h2("Summary"))
         lines.append("")
     else:
-        lines.extend([h1("Evaluation Report"), ""])
+        lines = [h1("Evaluation Report"), ""]
         lines.append(h2("Summary"))
         lines.append("")
     if markdown:
@@ -1597,10 +1598,10 @@ def generate_eval_report(result_file: str, markdown: bool = True) -> str:
             markdown=markdown,
         )
     )
-    if markdown:
+    if markdown and for_pr_comment:
         lines.append("")
         lines.append("</details>")
-    lines.append("######## REPORT END ########")
+        lines.append("######## REPORT END ########")
 
     return "\n".join(lines)
 
@@ -1615,8 +1616,10 @@ def main():
             parser.add_argument("command")  # consume "eval"
             parser.add_argument("--result-file", required=True)
             parser.add_argument("--output", "-o", default=None)
+            parser.add_argument("--for-pr-comment", action="store_true")
+            parser.add_argument("--stdout-markdown", action="store_true")
             args = parser.parse_args()
-            report = generate_eval_report(args.result_file)
+            report = generate_eval_report(args.result_file, for_pr_comment=args.for_pr_comment)
         else:
             parser = argparse.ArgumentParser(description="Generate comparison report")
             parser.add_argument("command")  # consume "compare"
@@ -1638,11 +1641,11 @@ def main():
     # the canonical bundle location at the end of the run, which is what the
     # user actually wants to navigate to.
     if args.output:
-        # Compare-mode and eval-mode both produce markdown for the saved file.
-        # For eval-mode, also print markdown to stdout because PR workflows
-        # capture stdout and post marked report blocks back to GitHub comments.
         if "command" in args and getattr(args, "command", None) == "eval":
-            stdout_report = report
+            if getattr(args, "for_pr_comment", False) or getattr(args, "stdout_markdown", False):
+                stdout_report = report
+            else:
+                stdout_report = generate_eval_report(args.result_file, markdown=False)
         else:
             stdout_report = generate_report(config_results, markdown=False)
         Path(args.output).write_text(report)
