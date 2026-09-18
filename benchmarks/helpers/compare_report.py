@@ -1537,24 +1537,15 @@ def generate_eval_report(result_file: str, markdown: bool = True, for_pr_comment
     fence_open = (lambda: "```text") if markdown else (lambda: "")
     fence_close = (lambda: "```") if markdown else (lambda: "")
 
-<<<<<<< Updated upstream
     if markdown and for_pr_comment:
         lines = ["######## REPORT START ########"]
-=======
-    lines = ["######## REPORT START ########"]
-    if markdown:
->>>>>>> Stashed changes
         lines.append("<details>")
         lines.append("<summary>Evaluation Report</summary>")
         lines.append("")
         lines.append(h2("Summary"))
         lines.append("")
     else:
-<<<<<<< Updated upstream
         lines = [h1("Evaluation Report"), ""]
-=======
-        lines.extend([h1("Evaluation Report"), ""])
->>>>>>> Stashed changes
         lines.append(h2("Summary"))
         lines.append("")
     if markdown:
@@ -1843,17 +1834,10 @@ def generate_eval_report(result_file: str, markdown: bool = True, for_pr_comment
             markdown=markdown,
         )
     )
-<<<<<<< Updated upstream
     if markdown and for_pr_comment:
         lines.append("")
         lines.append("</details>")
         lines.append("######## REPORT END ########")
-=======
-    if markdown:
-        lines.append("")
-        lines.append("</details>")
-    lines.append("######## REPORT END ########")
->>>>>>> Stashed changes
 
     return "\n".join(lines)
 
@@ -1893,19 +1877,11 @@ def main():
     # the canonical bundle location at the end of the run, which is what the
     # user actually wants to navigate to.
     if args.output:
-<<<<<<< Updated upstream
         if "command" in args and getattr(args, "command", None) == "eval":
             if getattr(args, "for_pr_comment", False) or getattr(args, "stdout_markdown", False):
                 stdout_report = report
             else:
                 stdout_report = generate_eval_report(args.result_file, markdown=False)
-=======
-        # Compare-mode and eval-mode both produce markdown for the saved file.
-        # For eval-mode, also print markdown to stdout because PR workflows
-        # capture stdout and post marked report blocks back to GitHub comments.
-        if "command" in args and getattr(args, "command", None) == "eval":
-            stdout_report = report
->>>>>>> Stashed changes
         else:
             stdout_report = generate_report(config_results, markdown=False)
         Path(args.output).write_text(report)
