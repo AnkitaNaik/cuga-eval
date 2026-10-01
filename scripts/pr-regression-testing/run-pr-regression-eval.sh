@@ -498,6 +498,7 @@ EVAL_ARGS=(
 )
 
 if [[ "${BENCHMARK}" == "appworld" ]]; then
+  EVAL_ARGS+=(--sdk)
   if [[ -n "${EVAL_KEY}" ]]; then
     EVAL_ARGS+=(--eval-key "${EVAL_KEY}")
   fi
